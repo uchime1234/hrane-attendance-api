@@ -4,3 +4,6 @@ __pycache__/
 .venv/
 venv/
 toy.py
+.vscode/
+toy2.py
+tests_manual.py
