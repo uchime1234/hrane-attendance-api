@@ -42,4 +42,11 @@ List every defect you found in the starter `app/main.py` (helpers and endpoints)
 
 | 19 | list_attendance | Doesn't check that date_from <= date_to. Contract requires 422 for an inverted range | GET /attendance?date_from=2026-07-10&date_to=2026-07-01 returns 200 with an empty list, should be 422 | if date_from and date_to and date_from > date_to: raise HTTPException(422, ...) |
 
+
+| 20 | list_attendance | No validation of page / page_size bounds; contract caps page_size at 100, min 1 | page_size=10000 returns everything; page_size=0 returns empty; page_size=-1 errors | (not fixed — noted) |
+
+| 21 | list_employees | No validation of page / page_size bounds | Same as above | (not fixed — noted) |
+
+| 22 | EmployeeIn model | emp_code, email, name, department, shift_start/end have no pattern/length constraints in the Pydantic model, but the contract requires them | POST /employees with emp_code="ABC" or a 500-char name → 201 accepted, contract expects 422 | (not fixed — noted) |
+
 Also note anything you looked at and decided was **not** a defect, and why.
