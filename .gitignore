@@ -7,3 +7,4 @@ toy.py
 .vscode/
 toy2.py
 tests_manual.py
+atlas-credentials.env
