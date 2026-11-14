@@ -50,3 +50,4 @@ List every defect you found in the starter `app/main.py` (helpers and endpoints)
 | 22 | EmployeeIn model | emp_code, email, name, department, shift_start/end have no pattern/length constraints in the Pydantic model, but the contract requires them | POST /employees with emp_code="ABC" or a 500-char name → 201 accepted, contract expects 422 | (not fixed — noted) |
 
 Also note anything you looked at and decided was **not** a defect, and why.
+

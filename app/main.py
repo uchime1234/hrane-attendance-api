@@ -7,7 +7,7 @@ Env:  MONGO_URI, MONGO_DB (a local .env is loaded for convenience)
 This file was written quickly by a colleague who has left the company. The happy path
 works, but nobody has reviewed it. Read PROBLEM_STATEMENT.docx for what is expected of you,
 openapi.yaml for the contract and DATA_MODEL.md for what is stored in MongoDB.
-"""
+"""   
 import os
 from typing import Optional
 from pymongo.errors import DuplicateKeyError
@@ -16,6 +16,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from pymongo import ReturnDocument 
 from datetime import datetime, timedelta, timezone
 
+IST = timezone(timedelta(hours=5, minutes=30))
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -30,18 +31,25 @@ client = MongoClient(
 )
 db = client[os.getenv("MONGO_DB", "attendance_db")]
 
-IST = timezone(timedelta(hours=5, minutes=30))
 
 app = FastAPI(title="Employee Attendance & Analytics API", version="2.0.0")
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
 def compute_late_minutes(punch_in: datetime, shift_start: str) -> int:
     # R1: truncate to whole seconds before any calculation
-    punch_in = punch_in.replace(microsecond=0)
-    h, m = map(int, shift_start.split(":"))
+    punch_in = punch_in.replace(microsecond=0) # sets the punch microseconds and seconds to 0, so that we can avoid any rounding issues 
+    h, m = map(int, shift_start.split(":")) # split the shift start to hours and minutes  and then convert them to integers
     start = punch_in.replace(hour=h, minute=m, second=0, microsecond=0)
     seconds = (punch_in - start).total_seconds()
     # R2: strictly more than 10 minutes (600 seconds) is late
@@ -58,8 +66,9 @@ def compute_work_hours(punch_in: datetime, punch_out: datetime) -> float:
 
 
 
+
 def compute_overtime(punch_out: datetime, shift_start: str, shift_end: str, date_str: str) -> int:
-    h, m = map(int, shift_end.split(":"))
+    h, m = map(int, shift_end.split(":"))# okay, so this takes the string and splits them, between hours and mintues 
     end = datetime.fromisoformat(date_str).replace(hour=h, minute=m, tzinfo=IST) # so takes the hours from the shift_end and then convert it to a datetime object(make it the data along with the time) and then set the timezone to IST
     if shift_end <= shift_start:
         end = end + timedelta(days=1)
@@ -130,27 +139,27 @@ def record_to_api(doc: dict) -> dict:
 
     # punch_in / punch_out -> epoch ms or None
     for key in ("punch_in", "punch_out"):
-        v = out.get(key)
-        out[key] = int(v.timestamp() * 1000) if v else None
+        v = out.get(key) # so this takes in the keys of a punch in and out and stores it 
+        out[key] = int(v.timestamp() * 1000) if v else None # if the keys are in the vairable v, then take the datetime values, uses the .timestamp to turn it into mill seconds, in the sense that ms multiply it by 1000 a(to turn it into an epouch ms), if there is no key in the v vraiable, then exit silently
 
     # history entries: convert `at` and any datetime values in `changes`
-    history = out.get("history") or []
-    new_history = []
-    for entry in history:
-        entry = dict(entry)
-        if entry.get("at"):
-            entry["at"] = int(entry["at"].timestamp() * 1000)
-        changes = entry.get("changes") or {}
-        new_changes = {}
-        for field, pair in changes.items():
-            pair = dict(pair)
-            for side in ("from", "to"):
-                val = pair.get(side)
-                if isinstance(val, datetime):
-                    pair[side] = int(val.timestamp() * 1000)
-            new_changes[field] = pair
-        entry["changes"] = new_changes
-        new_history.append(entry)
+    history = out.get("history") or [] # so look out for the history values, if none, create an empty history list
+    new_history = [] # we will be adding all the converted historical data here 
+    for entry in history: # loop through all the history values 
+        entry = dict(entry) # while looping, we want u to first , we want u to copy the entry and too and make it a dictorinary
+        if entry.get("at"):  # if there is a field entry named "at", turn it into an millseconds from 1 jan 1970 (.timestamp) and then multiply it by a 1000 to make it an epouch millsecond
+            entry["at"] = int(entry["at"].timestamp() * 1000), # turn it into an millseconds from 1 jan 1970 (.timestamp) and then multiply it by a 1000 to make it an epouch millsecond
+        changes = entry.get("changes") or {} # now, get the changes, made, if there is add it to the vairable named changes, if there isnt create a empty brackets(this is to avoid crashing)
+        new_changes = {} # now we created an empty dictionary
+        for field, pair in changes.items(): # now loop over field and pairs from changes
+            pair = dict(pair) # take the pairs and clone it
+            for side in ("from", "to"): # now take the from and the to
+                val = pair.get(side) #  read the values of the from and to, and check what they are , in this case they are datetimes
+                if isinstance(val, datetime): # so here we want to validate if the values in the val is a datetime, if so continue, if not skip
+                    pair[side] = int(val.timestamp() * 1000) # now because it true, we will now take the datetime and turn it into an epouch time, and then multiplying it turns it to an epouch milliseconds
+            new_changes[field] = pair # now attach the changes to the field to complete the dict in new changes 
+        entry["changes"] = new_changes# take that newchanges and add it to the entry [changes]
+        new_history.append(entry) # take the entry dict and add it to the new history empty dictionary
     out["history"] = new_history
 
     # legacy records may not have half_day
@@ -225,14 +234,14 @@ def punch_in(body: PunchInIn):
         raise HTTPException(404, "employee not found")
 
     # 2. Build the punch-in moment in UTC, truncated to whole seconds (R1)
-    if body.punched_at:
-        ts = datetime.fromtimestamp(body.punched_at / 1000, tz=timezone.utc)
-    else:
-        ts = datetime.now(timezone.utc)
+    if body.punched_at: # okay, so if body. punch at was provided  
+        ts = datetime.fromtimestamp(body.punched_at / 1000, tz=timezone.utc)# so this basically takes the epouch ms, divdes it by 1000 to turn it into seconds and at utc time zones, and then builds a date time off of it eg: 2026-07-06 03:55:00   
+    else: 
+        ts = datetime.now(timezone.utc) # if time was not provided, let them use the present time, which is now
     ts = ts.replace(microsecond=0) # either false nor true we will still set the microsecond to 0, so that we can avoid any rounding issues when calculating the difference between punch_in and punch_out
 
     # 3. The attendance date is the IST calendar date of the punch-in (R1)
-    d = ts.astimezone(IST).date().isoformat() 
+    d = ts.astimezone(IST).date().isoformat()# okay, so this extracts the datetime and turns it from utc time zone to ist, and then strips it to just a date(no time) and and then the, iso format puts the date in a string in iso format which is "yyyy-mm-dd", why because mongo db stores date in a string of isoformat
 
     # 4. Build the document
     doc = {
@@ -259,59 +268,53 @@ def punch_in(body: PunchInIn):
 
 @app.post("/attendance/punch-out", status_code=200)
 def punch_out(body: PunchOutRequest):
-    # 1. Employee must exist
-    emp = db.employees.find_one({"emp_code": body.emp_code})
-    if not emp:
-        raise HTTPException(404, "employee not found")
+    
+    emp = db.employees.find_one({"emp_code": body.emp_code}) # so here we search up the employee code, in the db, to make sure that the employee exists
+    if not emp: # if they exists, continue with the code
+        raise HTTPException(404, "employee not found") # if it does not exists, quietly return an error
 
-    # 2. Build the punch-out moment in UTC, truncated to seconds (R1)
-    if body.punched_at:
-        ts = datetime.fromtimestamp(body.punched_at / 1000, tz=timezone.utc)
-    else:
-        ts = datetime.now(timezone.utc)
-    ts = ts.replace(microsecond=0)
+    
+    if body.punched_at: # check if the punch at code exists, if it does continue with the code below
+        ts = datetime.fromtimestamp(body.punched_at / 1000, tz=timezone.utc) # this takes the datime in epouch millsecond, divdes it by 1000 to turn it into epouch seconds, the from tiem stamp changes it to a date in the time zone utc
+    else: # if there was no date available
+        ts = datetime.now(timezone.utc) # use the date present at that moment 
+    ts = ts.replace(microsecond=0) # what ever senirio takes place, truncate the microseconds to 0
 
-    # 3. Find the most recent OPEN record (punch_in <= ts, no punch_out yet)
-    #    Sort by date desc so we pick the latest — this is what makes
-    #    overnight shifts work: the record's `date` is yesterday, but
-    #    punch_in <= ts and punch_out is still None.
-    record = db.attendance_logs.find_one(
-        {
-            "emp_code": body.emp_code,
-            "punch_in": {"$ne": None, "$lte": ts},
-            "punch_out": None,
+    
+    record = db.attendance_logs.find_one( # so this tell the code to go to the database, look in the attendance log, and filter with these dict 
+        { # firstly, every single filter must be true
+            "emp_code": body.emp_code,  # so firstly, make sure that the employes code matches
+            "punch_in": {"$ne": None, "$lte": ts}, # the punch must not be none and must not be less than the punch out (whichbis the ts)
+            "punch_out": None, # and finally it must not have had a previous punch out
         },
-        sort=[("date", -1)],
+        sort=[("date", -1)], # okay so we are looking at the date parameter, which tells the code to use the most recent date, we use -1 to bring the newset one  
     )
-    if not record:
-        raise HTTPException(404, "no open punch-in found")
+    if not record:  # if this record does mot exists
+        raise HTTPException(404, "no open punch-in found") # raise a 404 error punch in not found
 
-    # 4. Validate the window: punch_out must be after punch_in, within 24h
-    punch_in = record["punch_in"]  # this is timezone-aware thanks to tz_aware=True
-    if ts <= punch_in:
-        raise HTTPException(422, "punched_at must be after punch_in")
-    if (ts - punch_in) > timedelta(hours=24):
-        raise HTTPException(422, "punched_at more than 24 hours after punch_in")
+    
+    punch_in = record["punch_in"] # so as the punch in date gotten from the records(mind u the records collects a dict which includes the emp code, punch out, punch in and date etc ...)  
+    if ts <= punch_in: # the punch out must be bigger than the punch in,  
+        raise HTTPException(422, "punched_at must be after punch_in") # if not, please raise an error 
+    if (ts - punch_in) > timedelta(hours=24): # now minus the punch out and the punch in, make sure that it is less than 24 hours
+        raise HTTPException(422, "punched_at more than 24 hours after punch_in") # if not raise an error, to tell the person that it is above 24 hours
 
-    # 5. Compute derived fields from the final times
-    late_minutes = compute_late_minutes(punch_in, emp["shift_start"])
-    work_hours = compute_work_hours(punch_in, ts)
-    overtime_minutes = compute_overtime(
-        ts, emp["shift_start"], emp["shift_end"], record["date"]
-    )
-    half_day = work_hours < 4.50  # R5: uses the ROUNDED work_hours
+    
+    late_minutes = compute_late_minutes(punch_in, emp["shift_start"]) # then call the compute late minutes
+    work_hours = compute_work_hours(punch_in, ts) # also compute the work hours, it takes in the parameter on punch in and punch out 
+    overtime_minutes = compute_overtime( # also compute the overtime minutes with the parameter of punch out, shift starts, shift end and record date
+        ts, emp["shift_start"], emp["shift_end"], record["date"] )
+    half_day = work_hours < 4.50  # if the work hours is less than 4.50 then it is a half day
 
-    # 6. Atomic update: only succeeds if the record is STILL open.
-    #    Two simultaneous punch-outs: one updates, the other's filter
-    #    (punch_out: None) no longer matches → returns None → 409.
-    updated = db.attendance_logs.find_one_and_update(
-        {
+
+    updated = db.attendance_logs.find_one_and_update( # so now that we have gotten the data, we need to update the vales in the database
+        { # this serves as a filter, it almost like saying, before u update check for these filters
             "emp_code": body.emp_code,
             "date": record["date"],
             "punch_out": None,  # ← the race guard
         },
         {
-            "$set": {
+            "$set": {  # if all filters passed, then update these values
                 "punch_out": ts,
                 "work_hours": work_hours,
                 "late_minutes": late_minutes,
@@ -319,13 +322,13 @@ def punch_out(body: PunchOutRequest):
                 "half_day": half_day,
             }
         },
-        return_document=ReturnDocument.AFTER,
+        return_document=ReturnDocument.AFTER, # The default for find_one_and_update is to return the document before the update (the "old" version). We want the updated version — the one with punch_out and work_hours set. ReturnDocument.AFTER ensures we get the post-update doc.
     )
-    if updated is None:
+    if updated is None: # f the update found no matching record (because someone else already punched out this one), find_one_and_update returns None. Raise 409.
         raise HTTPException(409, "already punched out")
 
     # 7. Return the API shape
-    return record_to_api(updated)
+    return record_to_api(updated) # send it to record api, to return the dict to the person
 
 @app.get("/attendance")
 def list_attendance(
@@ -378,30 +381,31 @@ def list_attendance(
 @app.patch("/attendance/{emp_code}/{date}")
 def regularize_attendance( emp_code: str = Path(...), date: str = Path(...), body: RegularizeRequest = ..., ):
     # ---- 1. Find the record --------------------------------------------
-    record = db.attendance_logs.find_one({"emp_code": emp_code, "date": date})
-    if not record:
-        # 404 if the employee doesn't exist OR has no record for that date
-        raise HTTPException(404, "no attendance record for that employee and date")
+    record = db.attendance_logs.find_one({"emp_code": emp_code, "date": date}) # so firstly, we want to find a particular attendance log, by the employees name and the date
+    if not record: # if the record doesnt exist raise an error 
+        raise HTTPException(404, "no attendance record for that employee and date") # 404 if the employee doesn't exist OR has no record for that date
 
     # Also verify the employee exists (defensive; the record should imply it)
-    emp = db.employees.find_one({"emp_code": emp_code})
-    if not emp:
+    emp = db.employees.find_one({"emp_code": emp_code}) # as we find the record, we also want to make sure that the employee code attached to the attendance exists
+    if not emp: # if the employer doesnt exists, raise an error 
         raise HTTPException(404, "employee not found")
+
 
     # ---- 2. Build the "merged result" ----------------------------------
     # Start from the current record; override only what was supplied.
-    original = dict(record)
+
+    original = dict(record)  # so, firstly copy the orginal dictionary
     merged = {
-        "status": body.status if body.status is not None else record.get("status"),
-        "punch_in": body.punch_in if body.punch_in is not None else _to_ms(record.get("punch_in")),
-        "punch_out": body.punch_out if body.punch_out is not None else _to_ms(record.get("punch_out")),
+        "status": body.status if body.status is not None else record.get("status"), # so get status from the request and attach it to the key status
+        "punch_in": body.punch_in if body.punch_in is not None else _to_ms(record.get("punch_in")), # get the new punch in from the request and attach it to the key punch in key
+        "punch_out": body.punch_out if body.punch_out is not None else _to_ms(record.get("punch_out")), # get the new punch out from the request and attach it to the key punch out key
     }
 
     # ---- 3. Validate the merged result ---------------------------------
     # Normalise status first (in case the client didn't send one, use existing)
-    merged_status = merged["status"]
+    merged_status = merged["status"] # get the merged status and from the key status in the merged dict and attach it to the merged status vairable 
 
-    if merged_status in ("ABSENT", "LEAVE"):
+    if merged_status in ("ABSENT", "LEAVE"): 
         # These statuses must have NO punch times
         if body.punch_in is not None or body.punch_out is not None:
             raise HTTPException(422, "ABSENT/LEAVE cannot have punch times")
@@ -504,7 +508,7 @@ def regularize_attendance( emp_code: str = Path(...), date: str = Path(...), bod
                 "work_hours": new_work,
                 "overtime_minutes": new_ot,
                 "half_day": new_half,
-            },
+            },            
             "$push": {"history": history_entry},
         },
         return_document=ReturnDocument.AFTER,
