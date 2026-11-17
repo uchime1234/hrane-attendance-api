@@ -36,16 +36,10 @@ app = FastAPI(title="Employee Attendance & Analytics API", version="2.0.0")
 
 from fastapi.middleware.cors import CORSMiddleware
 
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://hrane-attendance-dashboard.vercel.app",
-        "https://hr-attendance-dashboard.vercel.app",
-        "https://hrane-attendance-frontend-c554.vercel.app/"
-        # add any other Vercel preview URLs you use
-    ],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
