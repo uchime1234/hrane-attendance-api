@@ -43,7 +43,7 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "https://hrane-attendance-dashboard.vercel.app",
         "https://hr-attendance-dashboard.vercel.app",
-        "https://hrane-attendance-frontend-c554.vercel.app/"
+        "https://hrane-attendance-frontend-c554.vercel.app"
         # add any other Vercel preview URLs you use
     ],
     allow_methods=["*"],
